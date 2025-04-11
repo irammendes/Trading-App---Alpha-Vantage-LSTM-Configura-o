@@ -3,77 +3,86 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trading App - Alpha Vantage + LSTM</title>
+    <title>Trading App - Alpha Vantage Pro</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.18.0/dist/tf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
-        .container { max-width: 1000px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-        h1 { color: #007bff; text-align: center; }
-        .chart-container { margin: 20px 0; height: 400px; }
-        button { background: #007bff; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; margin: 5px; }
-        button:hover { background: #0056b3; }
-        button:disabled { background: #cccccc; }
-        #predictionText { font-weight: bold; color: #28a745; }
-        .loading { color: #6c757d; font-style: italic; }
-        .error { color: #dc3545; }
-        #apiKeyInput { padding: 8px; width: 300px; margin-right: 10px; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; background: #f8f9fa; }
+        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 25px; border-radius: 10px; box-shadow: 0 0 20px rgba(0,0,0,0.1); }
+        h1 { color: #2c3e50; text-align: center; margin-bottom: 30px; }
+        .chart-container { margin: 30px 0; height: 450px; background: white; border-radius: 8px; padding: 15px; box-shadow: 0 0 10px rgba(0,0,0,0.05); }
+        .control-panel { display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 25px; align-items: center; }
+        select, button, input { padding: 10px 15px; border-radius: 5px; font-size: 14px; }
+        select { flex: 1; min-width: 200px; border: 1px solid #ddd; }
+        button { background: #3498db; color: white; border: none; cursor: pointer; transition: all 0.3s; font-weight: 500; }
+        button:hover { background: #2980b9; transform: translateY(-1px); }
+        button:disabled { background: #95a5a6; cursor: not-allowed; transform: none; }
+        #predictionResult { background: #f1f8fe; padding: 15px; border-radius: 8px; margin-top: 20px; border-left: 4px solid #3498db; }
+        .loading { display: inline-block; margin-left: 10px; }
+        .status-message { padding: 10px; border-radius: 5px; margin: 10px 0; }
+        .error { background: #fdecea; color: #d32f2f; border-left: 4px solid #d32f2f; }
+        .success { background: #e8f5e9; color: #388e3c; border-left: 4px solid #388e3c; }
+        .info { background: #e3f2fd; color: #1976d2; border-left: 4px solid #1976d2; }
+        .progress-container { width: 100%; background: #f1f1f1; border-radius: 5px; margin: 15px 0; }
+        .progress-bar { height: 10px; background: #3498db; border-radius: 5px; width: 0%; transition: width 0.3s; }
+        @media (max-width: 768px) {
+            .control-panel { flex-direction: column; }
+            select, button, input { width: 100%; }
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>📊 Trading App - Alpha Vantage + LSTM</h1>
+        <h1>📈 Trading App - Alpha Vantage Pro</h1>
         
-        <div class="section">
-            <h2>Configuração</h2>
-            <div>
-                <input type="text" id="65OWFHCLDQYUGUWK" placeholder="Sua API Key Alpha Vantage (obtenha em https://www.alphavantage.co/)">
-                <button id="saveApiKeyBtn">Salvar API Key</button>
-            </div>
-            <p class="loading">Plano gratuito permite 5 requisições por minuto</p>
-        </div>
-
-        <div class="section">
-            <h2>Gráfico de Preços</h2>
-            <div class="chart-container">
-                <canvas id="priceChart"></canvas>
-            </div>
+        <div class="control-panel">
             <select id="assetSelect">
-                <option value="PETR4.BSA">Petrobras (PETR4)</option>
-                <option value="VALE3.BSA">Vale (VALE3)</option>
+                <option value="PETR4.SAO">Petrobras (PETR4)</option>
+                <option value="VALE3.SAO">Vale (VALE3)</option>
                 <option value="^BVSP">IBOVESPA</option>
-                <option value="WDOFUT">Mini Dólar (WDO)</option>
+                <option value="USDBRL=X">Dólar Americano/Real</option>
+                <option value="WDOFUT">Mini Dólar Futuro (Simulado)</option>
             </select>
-            <button id="refreshDataBtn">Atualizar Dados</button>
+            <select id="timeFrameSelect">
+                <option value="TIME_SERIES_DAILY">Diário</option>
+                <option value="TIME_SERIES_WEEKLY">Semanal</option>
+                <option value="TIME_SERIES_MONTHLY">Mensal</option>
+            </select>
+            <button id="refreshDataBtn">↻ Atualizar Dados</button>
+            <button id="predictBtn">🔮 Prever Próximo Período</button>
         </div>
 
-        <div class="section">
-            <h2>🔮 Previsão com LSTM</h2>
-            <button id="predictBtn">Prever Próximo Dia</button>
-            <p id="predictionText">Clique no botão para gerar previsões.</p>
-            <p id="loadingText" class="loading" style="display: none;">Treinando modelo (isso pode levar 1-2 minutos)...</p>
-            <p id="errorText" class="error" style="display: none;"></p>
+        <div id="statusMessage" class="status-message info" style="display: none;">
+            Insira sua API Key Alpha Vantage para começar
+        </div>
+
+        <div class="chart-container">
+            <canvas id="priceChart"></canvas>
+        </div>
+
+        <div class="progress-container" id="progressContainer" style="display: none;">
+            <div class="progress-bar" id="progressBar"></div>
+        </div>
+
+        <div id="predictionResult" style="display: none;">
+            <h3>📊 Resultado da Previsão</h3>
+            <p id="predictionText"></p>
+            <p id="confidenceText"></p>
+            <p id="nextDateText"></p>
         </div>
     </div>
 
     <script>
-        // Variáveis globais
+        // Configurações globais
+        const ALPHA_VANTAGE_API_KEY = "65OWFHCLDQYUGUWK"; // Sua chave API
         let historicalData = [];
-        let priceChart;
         let dates = [];
-        let alphaVantageApiKey = localStorage.getItem('alphaVantageApiKey') || '';
+        let priceChart;
+        let currentSymbol = "PETR4.SAO";
+        let currentTimeFrame = "TIME_SERIES_DAILY";
 
-        // Configuração inicial
-        document.addEventListener('DOMContentLoaded', () => {
-            document.getElementById('apiKeyInput').value = alphaVantageApiKey;
-            initChart();
-            if (alphaVantageApiKey) {
-                fetchStockData('PETR4.BSA');
-            }
-        });
-
-        // Inicializar gráfico
+        // Inicialização do gráfico
         function initChart() {
             const ctx = document.getElementById('priceChart').getContext('2d');
             priceChart = new Chart(ctx, {
@@ -81,210 +90,319 @@
                 data: {
                     labels: [],
                     datasets: [{
-                        label: 'Preço (R$)',
+                        label: 'Preço de Fechamento',
                         data: [],
-                        borderColor: '#007bff',
+                        borderColor: '#3498db',
                         borderWidth: 2,
-                        fill: false
+                        backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                        fill: true,
+                        tension: 0.1
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    plugins: {
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false
+                        }
+                    },
                     scales: {
                         x: {
+                            grid: {
+                                display: false
+                            },
                             ticks: {
                                 maxRotation: 45,
                                 minRotation: 45
                             }
+                        },
+                        y: {
+                            beginAtZero: false
                         }
                     }
                 }
             });
         }
 
-        // Salvar API Key
-        document.getElementById('saveApiKeyBtn').addEventListener('click', () => {
-            alphaVantageApiKey = document.getElementById('apiKeyInput').value.trim();
-            localStorage.setItem('alphaVantageApiKey', alphaVantageApiKey);
-            alert('API Key salva com sucesso!');
-            if (alphaVantageApiKey) {
-                fetchStockData(document.getElementById('assetSelect').value);
-            }
-        });
+        // Mostrar mensagem de status
+        function showStatus(message, type = 'info') {
+            const statusElement = document.getElementById('statusMessage');
+            statusElement.textContent = message;
+            statusElement.className = `status-message ${type}`;
+            statusElement.style.display = 'block';
+        }
 
         // Buscar dados da Alpha Vantage
-        async function fetchStockData(symbol) {
-            if (!alphaVantageApiKey) {
-                document.getElementById('errorText').textContent = 'Por favor, insira uma API Key válida';
-                document.getElementById('errorText').style.display = 'block';
+        async function fetchStockData() {
+            if (!ALPHA_VANTAGE_API_KEY) {
+                showStatus('Por favor, configure sua API Key Alpha Vantage', 'error');
                 return;
             }
 
-            document.getElementById('predictionText').textContent = "Carregando dados...";
-            document.getElementById('errorText').style.display = 'none';
+            currentSymbol = document.getElementById('assetSelect').value;
+            currentTimeFrame = document.getElementById('timeFrameSelect').value;
+
+            showStatus('Carregando dados...', 'info');
             document.getElementById('refreshDataBtn').disabled = true;
-            
+            document.getElementById('predictBtn').disabled = true;
+            document.getElementById('predictionResult').style.display = 'none';
+
             try {
-                let url, dataKey;
-                
-                if (symbol === 'WDOFUT') {
-                    // Dados de futuros (exemplo com dados simulados)
-                    const today = new Date();
-                    dates = [];
-                    historicalData = [];
-                    
-                    for (let i = 60; i >= 0; i--) {
-                        const date = new Date();
-                        date.setDate(today.getDate() - i);
-                        dates.push(`${date.getDate()}/${date.getMonth()+1}/${date.getFullYear()}`);
-                        historicalData.push((100 + Math.sin(i * 0.2) * 5 + Math.random() * 2).toFixed(2));
-                    }
+                if (currentSymbol === 'WDOFUT') {
+                    // Simulação para Mini Dólar
+                    await loadSimulatedData();
                 } else {
-                    // Ações e índices
-                    url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${symbol}&outputsize=compact&apikey=${alphaVantageApiKey}`;
+                    // Dados reais da Alpha Vantage
+                    const url = `https://www.alphavantage.co/query?function=${currentTimeFrame}&symbol=${currentSymbol}&apikey=${ALPHA_VANTAGE_API_KEY}`;
                     const response = await axios.get(url);
                     
                     if (response.data['Error Message']) {
                         throw new Error(response.data['Error Message']);
                     }
                     
-                    const timeSeries = response.data['Time Series (Daily)'];
+                    const timeSeriesKey = Object.keys(response.data).find(key => key.includes('Time Series'));
+                    if (!timeSeriesKey) {
+                        throw new Error('Formato de dados inválido da API');
+                    }
+                    
+                    const timeSeries = response.data[timeSeriesKey];
                     dates = Object.keys(timeSeries).sort();
-                    historicalData = dates.map(date => parseFloat(timeSeries[date]['4. close']).reverse();
+                    
+                    // Extrair preços de fechamento
+                    historicalData = dates.map(date => {
+                        const priceKey = Object.keys(timeSeries[date]).find(key => key.includes('close') || key.includes('4.'));
+                        return parseFloat(timeSeries[date][priceKey]);
+                    }).reverse();
+                    
                     dates = dates.reverse().map(date => {
                         const [year, month, day] = date.split('-');
                         return `${day}/${month}/${year}`;
                     });
                 }
 
-                // Atualizar gráfico
-                priceChart.data.labels = dates;
-                priceChart.data.datasets[0].data = historicalData;
-                priceChart.update();
-                
-                document.getElementById('predictionText').textContent = 
-                    `Dados carregados: ${historicalData.length} dias (${symbol})`;
+                updateChart();
+                showStatus(`Dados carregados com sucesso: ${historicalData.length} períodos`, 'success');
                 
             } catch (error) {
-                console.error("Erro:", error);
-                document.getElementById('errorText').textContent = 
-                    `Erro ao carregar dados: ${error.message || 'Verifique sua API Key'}`;
-                document.getElementById('errorText').style.display = 'block';
+                console.error('Erro ao buscar dados:', error);
+                showStatus(`Erro: ${error.message || 'Falha ao carregar dados'}`, 'error');
                 
-                // Dados simulados em caso de erro
-                const today = new Date();
-                dates = [];
-                historicalData = [];
-                
-                for (let i = 30; i >= 0; i--) {
-                    const date = new Date();
-                    date.setDate(today.getDate() - i);
-                    dates.push(`${date.getDate()}/${date.getMonth()+1}/${date.getFullYear()}`);
-                    historicalData.push((20 + Math.sin(i * 0.5) * 3 + Math.random() * 2).toFixed(2));
-                }
-                
-                priceChart.data.labels = dates;
-                priceChart.data.datasets[0].data = historicalData;
-                priceChart.update();
+                // Carregar dados simulados em caso de erro
+                await loadSimulatedData();
             } finally {
                 document.getElementById('refreshDataBtn').disabled = false;
+                document.getElementById('predictBtn').disabled = historicalData.length < 10;
             }
         }
 
-        // Prever próximo dia com LSTM
-        async function predictNextPrice() {
+        // Carregar dados simulados
+        async function loadSimulatedData() {
+            const today = new Date();
+            dates = [];
+            historicalData = [];
+            
+            const periods = currentTimeFrame === 'TIME_SERIES_WEEKLY' ? 52 : 
+                          currentTimeFrame === 'TIME_SERIES_MONTHLY' ? 24 : 90;
+            
+            const volatility = currentSymbol === 'WDOFUT' ? 2 : 1;
+            const basePrice = currentSymbol === 'WDOFUT' ? 5000 : 30;
+            
+            for (let i = periods; i >= 0; i--) {
+                const date = new Date();
+                
+                if (currentTimeFrame === 'TIME_SERIES_WEEKLY') {
+                    date.setDate(today.getDate() - (i * 7));
+                } else if (currentTimeFrame === 'TIME_SERIES_MONTHLY') {
+                    date.setMonth(today.getMonth() - i);
+                } else {
+                    date.setDate(today.getDate() - i);
+                }
+                
+                dates.push(formatDate(date));
+                historicalData.push((
+                    basePrice + 
+                    Math.sin(i * 0.1) * (basePrice * 0.2) + 
+                    Math.random() * volatility
+                ).toFixed(2));
+            }
+        }
+
+        // Formatador de data
+        function formatDate(date) {
+            const day = date.getDate().toString().padStart(2, '0');
+            const month = (date.getMonth() + 1).toString().padStart(2, '0');
+            const year = date.getFullYear();
+            return `${day}/${month}/${year}`;
+        }
+
+        // Atualizar gráfico
+        function updateChart() {
+            priceChart.data.labels = dates;
+            priceChart.data.datasets[0].data = historicalData;
+            priceChart.data.datasets[0].label = `${getAssetName(currentSymbol)} - Preço de Fechamento`;
+            priceChart.update();
+        }
+
+        // Obter nome do ativo
+        function getAssetName(symbol) {
+            const assets = {
+                'PETR4.SAO': 'Petrobras (PETR4)',
+                'VALE3.SAO': 'Vale (VALE3)',
+                '^BVSP': 'IBOVESPA',
+                'USDBRL=X': 'Dólar Americano/Real',
+                'WDOFUT': 'Mini Dólar Futuro'
+            };
+            return assets[symbol] || symbol;
+        }
+
+        // Prever próximo período com LSTM
+        async function predictNextPeriod() {
             if (historicalData.length < 10) {
-                alert("Dados insuficientes! Carregue mais dados primeiro.");
+                showStatus('Dados insuficientes para previsão', 'error');
                 return;
             }
 
             const predictBtn = document.getElementById('predictBtn');
-            const loadingText = document.getElementById('loadingText');
-            const errorText = document.getElementById('errorText');
+            const progressContainer = document.getElementById('progressContainer');
+            const progressBar = document.getElementById('progressBar');
+            const predictionResult = document.getElementById('predictionResult');
             
             predictBtn.disabled = true;
-            loadingText.style.display = 'block';
-            errorText.style.display = 'none';
+            progressContainer.style.display = 'block';
+            progressBar.style.width = '0%';
+            predictionResult.style.display = 'none';
+            
+            showStatus('Iniciando treinamento do modelo LSTM...', 'info');
 
             try {
-                // Normalizar dados entre 0 e 1
+                // Normalizar dados
                 const maxVal = Math.max(...historicalData);
                 const minVal = Math.min(...historicalData);
-                const normalizedData = historicalData.map(val => 
-                    [(val - minVal) / (maxVal - minVal)]
-                );
-
-                // Criar modelo LSTM
+                const normalizedData = historicalData.map(val => [(val - minVal) / (maxVal - minVal)]);
+                
+                // Criar modelo LSTM melhorado
                 const model = tf.sequential();
                 model.add(tf.layers.lstm({
-                    units: 20,
+                    units: 32,
                     inputShape: [5, 1],
-                    returnSequences: false
+                    returnSequences: false,
+                    kernelRegularizer: tf.regularizers.l2({ l2: 0.01 })
                 }));
+                model.add(tf.layers.dropout({ rate: 0.2 }));
                 model.add(tf.layers.dense({ units: 1 }));
+                
                 model.compile({
-                    optimizer: tf.train.adam(0.01),
-                    loss: 'meanSquaredError'
+                    optimizer: tf.train.adam(0.001),
+                    loss: 'meanSquaredError',
+                    metrics: ['mae']
                 });
 
-                // Preparar dados (janela de 5 dias para prever o 6º)
+                // Preparar dados de treino
+                const lookBack = 5;
                 const xs = [];
                 const ys = [];
-                for (let i = 0; i < normalizedData.length - 5; i++) {
-                    xs.push(normalizedData.slice(i, i + 5));
-                    ys.push(normalizedData[i + 5]);
+                
+                for (let i = 0; i < normalizedData.length - lookBack; i++) {
+                    xs.push(normalizedData.slice(i, i + lookBack));
+                    ys.push(normalizedData[i + lookBack]);
                 }
 
                 const xsTensor = tf.tensor3d(xs);
                 const ysTensor = tf.tensor2d(ys);
 
-                // Treinar modelo com callback para evitar travamento
+                // Treinar modelo com callbacks
+                const totalEpochs = 100;
                 await model.fit(xsTensor, ysTensor, {
-                    epochs: 50,
-                    batchSize: 8,
+                    epochs: totalEpochs,
+                    batchSize: 16,
+                    validationSplit: 0.2,
                     callbacks: {
-                        onEpochEnd: (epoch, logs) => {
-                            console.log(`Época ${epoch}: loss = ${logs.loss}`);
-                            loadingText.textContent = `Treinando modelo... Época ${epoch+1}/50 (loss: ${logs.loss.toFixed(5)})`;
+                        onEpochEnd: async (epoch, logs) => {
+                            const progress = ((epoch + 1) / totalEpochs) * 100;
+                            progressBar.style.width = `${progress}%`;
+                            
+                            showStatus(
+                                `Treinamento: Época ${epoch + 1}/${totalEpochs} - Loss: ${logs.loss.toFixed(6)}`, 
+                                'info'
+                            );
+                            
+                            await tf.nextFrame(); // Liberar a UI
                         }
                     }
                 });
 
-                // Fazer previsão (últimos 5 dias)
-                const lastFive = normalizedData.slice(-5);
-                const prediction = model.predict(tf.tensor3d([lastFive]));
-                const predictedVal = prediction.dataSync()[0] * (maxVal - minVal) + minVal;
+                // Fazer previsão
+                const lastSequence = normalizedData.slice(-lookBack);
+                const prediction = model.predict(tf.tensor3d([lastSequence]));
+                const predictedValue = prediction.dataSync()[0] * (maxVal - minVal) + minVal;
+                
+                // Calcular confiança (1 - erro médio relativo)
+                const predictions = model.predict(xsTensor).dataSync();
+                let totalError = 0;
+                
+                for (let i = 0; i < predictions.length; i++) {
+                    const expected = ys[i][0] * (maxVal - minVal) + minVal;
+                    const predicted = predictions[i] * (maxVal - minVal) + minVal;
+                    totalError += Math.abs(expected - predicted) / expected;
+                }
+                
+                const avgError = totalError / predictions.length;
+                const confidence = (1 - avgError) * 100;
 
-                // Calcular próxima data (última data + 1 dia)
+                // Calcular próxima data
                 const lastDate = new Date(dates[dates.length-1].split('/').reverse().join('-'));
-                lastDate.setDate(lastDate.getDate() + 1);
-                const nextDateStr = `${lastDate.getDate()}/${lastDate.getMonth()+1}/${lastDate.getFullYear()}`;
+                
+                if (currentTimeFrame === 'TIME_SERIES_WEEKLY') {
+                    lastDate.setDate(lastDate.getDate() + 7);
+                } else if (currentTimeFrame === 'TIME_SERIES_MONTHLY') {
+                    lastDate.setMonth(lastDate.getMonth() + 1);
+                } else {
+                    lastDate.setDate(lastDate.getDate() + 1);
+                }
+                
+                const nextDateStr = formatDate(lastDate);
 
+                // Exibir resultados
                 document.getElementById('predictionText').innerHTML = 
-                    `Previsão para ${nextDateStr}: <strong>R$ ${predictedVal.toFixed(2)}</strong>`;
+                    `<strong>Previsão:</strong> R$ ${predictedValue.toFixed(2)}`;
+                
+                document.getElementById('confidenceText').innerHTML = 
+                    `<strong>Confiança do Modelo:</strong> ${confidence.toFixed(1)}%`;
+                
+                document.getElementById('nextDateText').innerHTML = 
+                    `<strong>Próximo Período:</strong> ${nextDateStr}`;
+                
+                predictionResult.style.display = 'block';
+                showStatus('Previsão concluída com sucesso!', 'success');
                 
             } catch (error) {
-                console.error("Erro no treinamento:", error);
-                errorText.textContent = `Erro na LSTM: ${error.message}`;
-                errorText.style.display = 'block';
+                console.error('Erro no treinamento:', error);
+                showStatus(`Erro na previsão: ${error.message}`, 'error');
             } finally {
-                predictBtn.disabled = false;
-                loadingText.style.display = 'none';
+                document.getElementById('predictBtn').disabled = false;
+                progressContainer.style.display = 'none';
             }
         }
 
         // Event Listeners
-        document.getElementById('assetSelect').addEventListener('change', (e) => {
-            fetchStockData(e.target.value);
-        });
+        document.getElementById('refreshDataBtn').addEventListener('click', fetchStockData);
+        document.getElementById('predictBtn').addEventListener('click', predictNextPeriod);
+        document.getElementById('assetSelect').addEventListener('change', fetchStockData);
+        document.getElementById('timeFrameSelect').addEventListener('change', fetchStockData);
 
-        document.getElementById('refreshDataBtn').addEventListener('click', () => {
-            const asset = document.getElementById('assetSelect').value;
-            fetchStockData(asset);
-        });
-
-        document.getElementById('predictBtn').addEventListener('click', predictNextPrice);
+        // Inicialização
+        initChart();
+        
+        // Verificar se a API Key está configurada
+        if (ALPHA_VANTAGE_API_KEY && ALPHA_VANTAGE_API_KEY.length === 16) {
+            showStatus('API Key configurada. Carregando dados iniciais...', 'success');
+            fetchStockData();
+        } else {
+            showStatus('API Key inválida ou não configurada. Usando dados simulados.', 'error');
+            loadSimulatedData().then(updateChart);
+        }
     </script>
 </body>
 </html>
